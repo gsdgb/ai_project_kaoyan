@@ -1,9 +1,10 @@
 from fastapi import APIRouter
 
-from  app.core.config import settings
+from app.core.config import settings
 from app.core.response import success_response
 
 router = APIRouter()
+
 
 @router.get("/health")
 def health_check():
@@ -12,7 +13,6 @@ def health_check():
             "status": "ok",
             "app_name": settings.APP_NAME,
             "version": settings.APP_VERSION
-            # "service": settings.APP_NAME,
         },
-         message="Health check successful   service is running"
+        message="service is running"
     )

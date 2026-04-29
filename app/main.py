@@ -7,7 +7,7 @@ from app.services.todo_service import init_db
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="AI 学习助手后端服务脚手架 balabala",
+    description="AI 学习助手后端服务脚手架",
 )
 
 
