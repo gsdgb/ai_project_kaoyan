@@ -3,7 +3,8 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
-
+#我后加的
+*.dp
 # Virtual environment
 .venv/
 venv/

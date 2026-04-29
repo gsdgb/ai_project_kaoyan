@@ -1,29 +1,28 @@
 from fastapi import FastAPI
 
+from app.api.v1.api import api_router
+from app.core.config import settings
+from app.services.todo_service import init_db
+
 app = FastAPI(
-    title="AI Backend Starter jm",
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
     description="AI 学习助手后端服务脚手架",
-    version="0.1.0",
 )
 
+
+@app.on_event("startup")
+def on_startup():
+    init_db()
+
+
+app.include_router(api_router, prefix="/api/v1")
+
+
 @app.get("/")
-def read_root():
-    return{
-        "message": "Hi JM happy everyDay!",
-        "status": "running"
+def root():
+    return {
+        "message": "Welcome to AI Backend Starter",
+        "docs": "/docs",
+        "api_prefix": "/api/v1"
     }
-
-@app.get("/health")
-def health_check():
-    return{
-        "status":"ok",
-        "service": "ai-backend-starter"
-    }
-
-@app.get("/jm")
-def jm():
-    return{
-        "message": "OK jm",
-        "service":"ai-jm"
-    }
-
