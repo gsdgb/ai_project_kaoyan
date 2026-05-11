@@ -26,7 +26,7 @@ app.include_router(api_router, prefix="/api/v1")
 @app.get("/")
 def root():
     return {
-        "message": "Welcome to AI Backend Starter",
+        "message": "Welcome to AI Backend Starter ———— JM",
         "docs": "/docs",
         "api_prefix": "/api/v1",
     }
