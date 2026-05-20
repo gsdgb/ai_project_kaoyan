@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.models.user_file import UserFile
 
+from app.rag.pipelines.ingest_pipeline import ingest_pdf
+
 ALLOWED_EXTENSIONS = {
     ".pdf",
     ".docx",
@@ -48,6 +50,7 @@ async def save_upload_file(
     async with aiofiles.open(file_path, "wb") as out_file:
         await out_file.write(content)
 
+
     user_file = UserFile(
         owner_id=owner_id,
         filename=unique_filename,
@@ -62,5 +65,11 @@ async def save_upload_file(
     db.commit()
 
     db.refresh(user_file)
+    if file_ext == ".pdf":
+        ingest_pdf(
+            file_path=file_path,
+            owner_id=owner_id,
+            file_id=user_file.id
+        )
 
     return user_file
