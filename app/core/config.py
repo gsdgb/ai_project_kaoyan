@@ -23,6 +23,7 @@ class Settings:
     OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "")
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "deepseek-chat")
 
+    TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY", "")
 
     @property
     def SQLALCHEMY_DATABASE_URL(self) -> str:
