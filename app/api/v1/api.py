@@ -10,7 +10,7 @@ from app.api.v1.endpoints import (
     rag,
     conversations,
     agent,
-
+    stream,
 )
 
 api_router = APIRouter()
@@ -27,3 +27,9 @@ api_router.include_router(
     tags=["Conversations"],
 )
 api_router.include_router(agent.router, tags=["Agent"])
+
+api_router.include_router(
+    stream.router,
+    prefix="/stream",
+    tags=["stream"]
+)

@@ -67,7 +67,31 @@ def research_node(state: AgentState):
 
     plan = state["plan"]
 
-    search_result = search_tool.invoke(plan)
+    if len(plan) > 400:
+        extract_prompt = f"""
+        请将以下研究计划提炼成一个简洁的搜索查询（不超过400个字符）：
+
+        研究计划：
+        {plan}
+
+        要求：
+        1. 提取核心关键词和关键问题
+        2. 保持语义完整，适合搜索引擎使用
+        3. 严格控制在400字符以内
+        4. 直接输出查询内容，不要添加其他说明
+
+        简洁查询：
+        """
+
+        extraction_response = llm.invoke(extract_prompt)
+        query = extraction_response.content.strip()
+
+        if len(query) > 400:
+            query = query[:400]
+    else:
+        query = plan
+
+    search_result = search_tool.invoke(query)
 
     prompt = f"""
     {RESEARCH_PROMPT}

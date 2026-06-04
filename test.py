@@ -1,36 +1,17 @@
-from app.graph.agent_graph import graph
+import asyncio
 
-
-initial_state = {
-
-    "question": "2026年AI Agent的发展趋势是什么？简单回复",
-
-    "plan": "",
-
-    "research": "",
-
-    "reflection": "",
-
-    "final_answer": "",
-
-    "search_count": 0,
-
-    "messages": []
-}
-
-
-result = graph.invoke(
-    initial_state,
-    config={
-        "recursion_limit": 10
-    }
+from app.runtime.streaming import (
+    stream_graph_response
 )
 
-print("\n")
-print("=" * 80)
-print("Workflow 结束")
-print("=" * 80)
 
-print("\n最终答案:\n")
+async def main():
 
-print(result["final_answer"])
+    async for chunk in stream_graph_response(
+        "简要说明国内找工作的薪资"
+    ):
+
+        print(chunk)
+
+
+asyncio.run(main())

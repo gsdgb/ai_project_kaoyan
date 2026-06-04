@@ -2,8 +2,8 @@ from openai import OpenAI
 from sqlalchemy.orm import Session
 
 from app.agent.prompts.agent_prompt import AGENT_SYSTEM_PROMPT
-from app.agent.tools.rag_tool import rag_tool
-from app.agent.tools.search_tool import search_web
+from app.agent.tools.rag_tool import rag_search
+from app.agent.tools.search_tool import tavily_search
 from app.core.config import settings
 
 client = OpenAI(
@@ -36,10 +36,10 @@ def agent_chat(
     tool_result = None
 
     if tool == "search":
-        tool_result = search_web(query)
+        tool_result = tavily_search(query)
 
     elif tool == "rag":
-        tool_result = rag_tool(
+        tool_result = rag_search(
             query=query,
             owner_id=owner_id,
             db=db,
