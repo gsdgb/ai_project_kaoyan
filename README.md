@@ -20,4 +20,5 @@
 1. 创建虚拟环境
 
 ```bash
-python -m venv .venv
+uvicorn app.main:app --reload
+然后启动redis服务(docker)

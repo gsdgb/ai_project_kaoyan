@@ -9,7 +9,7 @@ def reflection_router(state: AgentState):
 
     search_count = state["search_count"]
 
-    if search_count >= 3:
+    if search_count >= 2:
 
         print_router_decision(
             "达到最大搜索次数 -> FINAL"
