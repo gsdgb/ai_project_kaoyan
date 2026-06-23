@@ -7,9 +7,9 @@ def get_llm():
 
     return ChatOpenAI(
 
-        model="deepseek-chat",
+        model=settings.OPENAI_MODEL,
 
-        base_url="https://api.deepseek.com",
+        base_url=settings.OPENAI_BASE_URL,
 
         api_key=settings.OPENAI_API_KEY,
 
