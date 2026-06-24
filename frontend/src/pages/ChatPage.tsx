@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { streamChat } from "@/api/endpoints";
+import { useParams } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { chatApi, conversationApi } from "@/api/endpoints";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { cn } from "@/lib/utils";
 import {
@@ -19,13 +22,46 @@ interface Message {
 }
 
 export default function ChatPage() {
+  const { id } = useParams<{ id: string }>();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // --- Load history detail when id changes ---
+  useEffect(() => {
+    if (!id) {
+      setMessages([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingHistory(true);
+    conversationApi
+      .detail(Number(id))
+      .then(({ data }) => {
+        if (cancelled) return;
+        const item = data.data;
+        setMessages([
+          { role: "user", content: item.user_message },
+          { role: "assistant", content: item.assistant_message },
+        ]);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("加载历史记录失败");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingHistory(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   // Auto-scroll to bottom
   const scrollToBottom = useCallback(() => {
@@ -49,6 +85,13 @@ export default function ChatPage() {
     const q = input.trim();
     if (!q || streaming) return;
 
+    // Cancel any pending abort
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setMessages((prev) => [...prev, { role: "user", content: q }]);
     setInput("");
     setStreaming(true);
@@ -56,39 +99,36 @@ export default function ChatPage() {
     // Placeholder for assistant message
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
-    abortRef.current = streamChat(
-      q,
-      // onChunk
-      (text) => {
-        setMessages((prev) => {
-          const next = [...prev];
-          const last = next[next.length - 1];
-          if (last?.role === "assistant") {
-            last.content += text;
-          }
-          return [...next];
-        });
-      },
-      // onDone
-      () => {
-        setStreaming(false);
-        abortRef.current = null;
-      },
-      // onError
-      (err) => {
-        setStreaming(false);
-        abortRef.current = null;
+    try {
+      const { data } = await chatApi.send({ message: q }, controller.signal);
+      setMessages((prev) => {
+        const next = [...prev];
+        const last = next[next.length - 1];
+        if (last?.role === "assistant") {
+          last.content = data.data.assistant_message;
+        }
+        return next;
+      });
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        // user cancelled — do nothing
+      } else {
         setMessages((prev) => {
           const next = [...prev];
           const last = next[next.length - 1];
           if (last?.role === "assistant" && !last.content) {
-            last.content = `[错误] ${err}`;
+            const msg =
+              err instanceof Error ? err.message : "请求失败，请稍后重试";
+            last.content = `[错误] ${msg}`;
           }
-          return [...next];
+          return next;
         });
-        toast.error("流式响应中断: " + err);
+        toast.error("请求失败");
       }
-    );
+    } finally {
+      setStreaming(false);
+      abortRef.current = null;
+    }
   };
 
   const handleCancel = () => {
@@ -110,6 +150,25 @@ export default function ChatPage() {
     setTimeout(() => setCopiedIdx(null), 2000);
   };
 
+  // ---- Loading history ----
+  if (loadingHistory) {
+    return (
+      <div className="max-w-3xl mx-auto h-[calc(100vh-8rem)] flex items-center justify-center">
+        <div className="flex items-center gap-2 text-neutral-400 text-sm">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-400 animate-pulse-dot" />
+          <span
+            className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-400 animate-pulse-dot"
+            style={{ animationDelay: "0.15s" }}
+          />
+          <span
+            className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-400 animate-pulse-dot"
+            style={{ animationDelay: "0.3s" }}
+          />
+        </div>
+      </div>
+    );
+  }
+
   // ---- Empty state ----
   if (messages.length === 0) {
     return (
@@ -121,7 +180,6 @@ export default function ChatPage() {
             description="向 AI 学习助手提问，探索知识的无限可能"
           />
         </div>
-        {/* Input bar at bottom even when empty */}
         <ChatInputBar
           input={input}
           setInput={setInput}
@@ -164,14 +222,25 @@ export default function ChatPage() {
               )}
             >
               {msg.role === "assistant" ? (
-                <div
-                  className="prose-chat"
-                  dangerouslySetInnerHTML={{
-                    __html:
-                      msg.content ||
-                      '<span class="inline-flex items-center gap-1 text-neutral-400"><span class="inline-block w-1.5 h-1.5 rounded-full bg-neutral-400 animate-pulse-dot"></span><span class="inline-block w-1.5 h-1.5 rounded-full bg-neutral-400 animate-pulse-dot" style="animation-delay:0.15s"></span><span class="inline-block w-1.5 h-1.5 rounded-full bg-neutral-400 animate-pulse-dot" style="animation-delay:0.3s"></span></span>',
-                  }}
-                />
+                msg.content ? (
+                  <div className="prose-chat">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-neutral-400">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-400 animate-pulse-dot" />
+                    <span
+                      className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-400 animate-pulse-dot"
+                      style={{ animationDelay: "0.15s" }}
+                    />
+                    <span
+                      className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-400 animate-pulse-dot"
+                      style={{ animationDelay: "0.3s" }}
+                    />
+                  </span>
+                )
               ) : (
                 <p className="whitespace-pre-wrap">{msg.content}</p>
               )}

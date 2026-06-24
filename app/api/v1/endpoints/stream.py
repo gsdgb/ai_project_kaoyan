@@ -15,7 +15,7 @@ async def stream_chat(
     高性能标准 SSE 流式接口
     """
     async def event_generator():
-        async for chunk in stream_graph_response(question):
+        async for chunk in stream_graph_response(question, current_user.id):
             # 严格遵循 standard SSE 帧格式
             yield f"data: {chunk}\n\n"
 

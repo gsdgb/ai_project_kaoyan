@@ -2,13 +2,11 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { conversationApi } from "@/api/endpoints";
 import type { Conversation } from "@/types";
-import { Card } from "@/components/ui";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { PageSpinner } from "@/components/ui/Spinner";
-import { Badge } from "@/components/ui/Badge";
 import { formatDate, truncate } from "@/lib/utils";
-import { MessageSquare, Plus, Search } from "lucide-react";
+import { MessageSquare, Plus, Search, Clock } from "lucide-react";
 import Button from "@/components/ui/Button";
 
 export default function ConversationListPage() {
@@ -37,15 +35,15 @@ export default function ConversationListPage() {
   const filtered = conversations.filter(
     (c) =>
       !search ||
-      c.user_message.toLowerCase().includes(search.toLowerCase())
+      c.user_message.toLowerCase().includes(search.toLowerCase()) ||
+      c.assistant_message.toLowerCase().includes(search.toLowerCase())
   );
 
-  // ---- States ----
   if (loading) return <PageSpinner />;
   if (error) return <ErrorState message={error} onRetry={fetchData} />;
 
   return (
-    <div className="max-w-4xl mx-auto animate-fade-in">
+    <div className="max-w-2xl mx-auto animate-fade-in">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
@@ -95,30 +93,35 @@ export default function ConversationListPage() {
           }
         />
       ) : (
-        <div className="grid gap-3">
+        <div className="space-y-2.5">
           {filtered.map((item) => (
-            <Link key={item.id} to={`/chat/${item.id}`} className="no-underline">
-              <Card hover className="flex items-start gap-4">
-                <div className="hidden sm:flex h-10 w-10 shrink-0 rounded-lg bg-primary-50 items-center justify-center mt-0.5">
-                  <MessageSquare size={18} className="text-primary-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-medium text-neutral-800 truncate">
-                      {truncate(item.user_message, 60)}
-                    </span>
+            <Link
+              key={item.id}
+              to={`/chat/${item.id}`}
+              className="block group no-underline"
+            >
+              <div className="bg-white rounded-xl border border-neutral-200/80 px-5 py-4 hover:shadow-md hover:border-neutral-300 transition-all cursor-pointer">
+                {/* Question line */}
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 h-6 w-6 shrink-0 rounded-md bg-primary-50 flex items-center justify-center">
+                    <MessageSquare size={13} className="text-primary-500" />
                   </div>
-                  <p className="text-sm text-neutral-500 truncate">
-                    {truncate(item.assistant_message, 100)}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-neutral-800 leading-relaxed line-clamp-2">
+                      {item.user_message}
+                    </p>
+                    {/* Answer preview */}
+                    <p className="mt-1.5 text-sm text-neutral-400 leading-relaxed line-clamp-2">
+                      {truncate(item.assistant_message, 120)}
+                    </p>
+                    {/* Time */}
+                    <div className="mt-2.5 flex items-center gap-1.5 text-xs text-neutral-300">
+                      <Clock size={11} />
+                      <span>{formatDate(item.created_at)}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="shrink-0 flex flex-col items-end gap-1.5">
-                  <span className="text-xs text-neutral-400">
-                    {formatDate(item.created_at)}
-                  </span>
-                  <Badge size="sm">对话</Badge>
-                </div>
-              </Card>
+              </div>
             </Link>
           ))}
         </div>

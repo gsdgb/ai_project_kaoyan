@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -34,4 +34,33 @@ def get_conversations(
     return success_response(
         data=data,
         message="conversation list success",
+    )
+
+
+@router.get("/conversations/{conversation_id}")
+def get_conversation_detail(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    msg = (
+        db.query(ChatMessage)
+        .filter(
+            ChatMessage.id == conversation_id,
+            ChatMessage.owner_id == current_user.id,
+        )
+        .first()
+    )
+
+    if msg is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    return success_response(
+        data={
+            "id": msg.id,
+            "user_message": msg.user_message,
+            "assistant_message": msg.assistant_message,
+            "created_at": msg.created_at,
+        },
+        message="conversation detail success",
     )

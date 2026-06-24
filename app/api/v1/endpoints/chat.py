@@ -17,7 +17,7 @@ def chat(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    assistant_message = chat_with_llm(request.message)
+    assistant_message = chat_with_llm(request.message, db, current_user.id)
 
     chat_message = create_chat_message(
         db=db,

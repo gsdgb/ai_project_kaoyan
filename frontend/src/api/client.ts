@@ -2,8 +2,8 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 import type { ApiResponse } from "@/types";
 
 const client = axios.create({
-  baseURL: "/api/v1",
-  timeout: 30000,
+  baseURL: import.meta.env.VITE_API_BASE_URL || "/api/v1",
+  timeout: 120000,
   headers: { "Content-Type": "application/json" },
 });
 

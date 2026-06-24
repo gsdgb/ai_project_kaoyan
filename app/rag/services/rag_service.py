@@ -14,22 +14,23 @@ client = OpenAI(
     base_url=settings.OPENAI_BASE_URL,
 )
 
-def rag_chat(query: str,owner_id: int,db: Session):
+def rag_chat(query: str, owner_id: int, db: Session):
     vectorstore = get_vectorstore()
 
     docs = vectorstore.similarity_search(
         query=query,
-        k=3,# 返回的文档数量
+        k=3,
         filter={
             "owner_id": owner_id
         }
     )
 
     sources = []
-
     for doc in docs:
+        text = doc.page_content or ""
         sources.append({
-            "source": doc.metadata.get("source"),
+            "content": text[:300],
+            "source": doc.metadata.get("source", ""),
             "file_id": doc.metadata.get("file_id"),
         })
 

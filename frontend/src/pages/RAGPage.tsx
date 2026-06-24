@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { ragApi } from "@/api/endpoints";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { Bot, Search, BookOpen, User, Copy, Check } from "lucide-react";
@@ -14,8 +17,27 @@ interface RAGMessage {
 export default function RAGPage() {
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState<RAGMessage[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [searching, setSearching] = useState(false);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+
+  // Load RAG history on mount
+  useEffect(() => {
+    ragApi
+      .history()
+      .then(({ data }) => {
+        const history: RAGMessage[] = [];
+        for (const item of data.data) {
+          history.push({ role: "user", content: item.user_message });
+          history.push({ role: "assistant", content: item.assistant_message });
+        }
+        setMessages(history);
+      })
+      .catch(() => {
+        // silently fail — user can still use the page
+      })
+      .finally(() => setLoadingHistory(false));
+  }, []);
 
   const handleSearch = async () => {
     const q = query.trim();
@@ -77,7 +99,13 @@ export default function RAGPage() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto py-2 space-y-4">
-        {messages.length === 0 && (
+        {loadingHistory && (
+          <div className="flex justify-center py-8">
+            <Spinner size="md" />
+          </div>
+        )}
+
+        {!loadingHistory && messages.length === 0 && (
           <EmptyState
             icon={BookOpen}
             title="知识库检索"
@@ -103,7 +131,15 @@ export default function RAGPage() {
                   : "bg-white border border-neutral-200 rounded-bl-md shadow-xs"
               }`}
             >
-              <p className="whitespace-pre-wrap">{msg.content}</p>
+              {msg.role === "assistant" ? (
+                <div className="prose-chat">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {msg.content}
+                  </ReactMarkdown>
+                </div>
+              ) : (
+                <p className="whitespace-pre-wrap">{msg.content}</p>
+              )}
 
               {/* Sources */}
               {msg.sources && msg.sources.length > 0 && (
@@ -117,7 +153,7 @@ export default function RAGPage() {
                         key={j}
                         className="text-xs text-neutral-500 bg-neutral-50 rounded-lg px-3 py-2"
                       >
-                        {src.content.slice(0, 200)}...
+                        {src.content?.slice(0, 200) || ""}
                       </div>
                     ))}
                   </div>

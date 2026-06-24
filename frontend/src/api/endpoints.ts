@@ -26,17 +26,20 @@ export const userApi = {
 
 // ---- Chat ----
 export const chatApi = {
-  send: (data: ChatRequest) =>
-    client.post<ApiResponse<ChatMessage>>("/chat", data),
+  send: (data: ChatRequest, signal?: AbortSignal) =>
+    client.post<ApiResponse<ChatMessage>>("/chat", data, { signal }),
 };
 
 // ---- Conversations ----
 export const conversationApi = {
   list: () => client.get<ApiResponse<Conversation[]>>("/conversations"),
+  detail: (id: number) =>
+    client.get<ApiResponse<Conversation>>(`/conversations/${id}`),
 };
 
 // ---- Files ----
 export const fileApi = {
+  list: () => client.get<ApiResponse<UserFile[]>>("/files"),
   upload: (file: File) => {
     const form = new FormData();
     form.append("file", file);
@@ -44,6 +47,12 @@ export const fileApi = {
       headers: { "Content-Type": "multipart/form-data" },
     });
   },
+  remove: (id: number) => client.delete(`/files/${id}`),
+};
+
+// ---- RAG ----
+export const ragApi = {
+  history: () => client.get<ApiResponse<Conversation[]>>("/rag/history"),
 };
 
 // ---- SSE Stream ----
@@ -76,12 +85,39 @@ export function streamChat(
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
         for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            onChunk(line.slice(6));
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+          try {
+            const event = JSON.parse(raw);
+            if (event.type === "token") {
+              onChunk(event.content ?? "");
+            } else if (event.type === "status" && event.content === "finished") {
+              onDone();
+              return;
+            } else if (event.type === "error") {
+              onError(event.content ?? "stream error");
+              return;
+            }
+            // ignore other event types (tool_start, node_end, hitl)
+          } catch {
+            // not JSON — treat as raw text chunk
+            onChunk(raw);
           }
         }
       }
-      if (buffer.startsWith("data: ")) onChunk(buffer.slice(6));
+      // flush trailing buffer
+      if (buffer.startsWith("data: ")) {
+        const raw = buffer.slice(6).trim();
+        if (raw) {
+          try {
+            const event = JSON.parse(raw);
+            if (event.type === "token") onChunk(event.content ?? "");
+          } catch {
+            onChunk(raw);
+          }
+        }
+      }
       onDone();
     })
     .catch((err) => {
