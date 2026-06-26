@@ -6,7 +6,6 @@ import {
   BarChart3,
   FileText,
   Settings,
-  Zap,
 } from "lucide-react";
 
 const navItems = [
@@ -20,11 +19,6 @@ const navItems = [
     label: "文件管理",
     icon: FolderOpen,
     path: "/files",
-  },
-  {
-    label: "RAG 检索",
-    icon: Zap,
-    path: "/rag",
   },
   {
     label: "统计分析",

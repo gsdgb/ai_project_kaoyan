@@ -58,7 +58,9 @@ export const ragApi = {
 // ---- SSE Stream ----
 export function streamChat(
   question: string,
-  onChunk: (text: string) => void,
+  useRag: boolean,
+  onToken: (text: string) => void,
+  onSources: (sources: Record<string, unknown>[]) => void,
   onDone: () => void,
   onError: (err: string) => void
 ): AbortController {
@@ -71,7 +73,7 @@ export function streamChat(
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ message: question }),
+    body: JSON.stringify({ message: question, use_rag: useRag }),
     signal: controller.signal,
   })
     .then(async (res) => {
@@ -84,40 +86,46 @@ export function streamChat(
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
+        // 按 \n\n 帧解析，不按单行粗暴解析
+        const frames = buffer.split("\n\n");
+        buffer = frames.pop() || "";
+        for (const frame of frames) {
+          if (!frame.trim()) continue;
+          for (const line of frame.split("\n")) {
+            if (!line.startsWith("data: ")) continue;
+            const raw = line.slice(6).trim();
+            if (!raw) continue;
+            try {
+              const event = JSON.parse(raw);
+              if (event.type === "token") {
+                onToken(event.content ?? "");
+              } else if (event.type === "sources") {
+                onSources(event.sources ?? []);
+              } else if (event.type === "done") {
+                onDone();
+                return;
+              } else if (event.type === "error") {
+                onError(event.content ?? "stream error");
+                return;
+              }
+              // saved, tool_start, node_end, hitl etc. → ignore
+            } catch {
+              // ignore non-JSON data
+            }
+          }
+        }
+      }
+      // flush trailing buffer
+      if (buffer.trim()) {
+        for (const line of buffer.split("\n")) {
           if (!line.startsWith("data: ")) continue;
           const raw = line.slice(6).trim();
           if (!raw) continue;
           try {
             const event = JSON.parse(raw);
-            if (event.type === "token") {
-              onChunk(event.content ?? "");
-            } else if (event.type === "done") {
-              onDone();
-              return;
-            } else if (event.type === "error") {
-              onError(event.content ?? "stream error");
-              return;
-            }
-            // saved, tool_start, node_end, hitl etc. → ignore
-          } catch {
-            onChunk(raw);
-          }
-        }
-      }
-      // flush trailing buffer
-      if (buffer.startsWith("data: ")) {
-        const raw = buffer.slice(6).trim();
-        if (raw) {
-          try {
-            const event = JSON.parse(raw);
-            if (event.type === "token") onChunk(event.content ?? "");
+            if (event.type === "token") onToken(event.content ?? "");
             else if (event.type === "done") { onDone(); return; }
-          } catch {
-            onChunk(raw);
-          }
+          } catch { /* ignore */ }
         }
       }
       onDone();

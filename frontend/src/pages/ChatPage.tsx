@@ -13,12 +13,21 @@ import {
   Bot,
   Copy,
   Check,
+  BookOpen,
+  FileText,
 } from "lucide-react";
 import toast from "react-hot-toast";
+
+interface RagSource {
+  content: string;
+  source: string;
+  file_id?: number;
+}
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+  sources?: RagSource[];
 }
 
 export default function ChatPage() {
@@ -26,9 +35,11 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [useRag, setUseRag] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const sendingRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -83,7 +94,9 @@ export default function ChatPage() {
 
   const handleSend = () => {
     const q = input.trim();
-    if (!q || streaming) return;
+    if (!q || streaming || sendingRef.current) return;
+
+    sendingRef.current = true;
 
     if (abortRef.current) {
       abortRef.current.abort();
@@ -96,31 +109,45 @@ export default function ChatPage() {
 
     abortRef.current = streamChat(
       q,
-      // onChunk — append each token to the last assistant message
+      useRag,
+      // onToken — 不可变更新，不直接 last.content += text
       (text) => {
         setMessages((prev) => {
           const next = [...prev];
-          const last = next[next.length - 1];
-          if (last?.role === "assistant") {
-            last.content += text;
+          const i = next.length - 1;
+          if (next[i]?.role === "assistant") {
+            next[i] = { ...next[i], content: next[i].content + text };
           }
-          return [...next];
+          return next;
+        });
+      },
+      // onSources — 挂到当前 assistant 消息上
+      (sources) => {
+        setMessages((prev) => {
+          const next = [...prev];
+          const i = next.length - 1;
+          if (next[i]?.role === "assistant") {
+            next[i] = { ...next[i], sources: sources as unknown as RagSource[] };
+          }
+          return next;
         });
       },
       // onDone
       () => {
         setStreaming(false);
         abortRef.current = null;
+        sendingRef.current = false;
       },
       // onError
       (err) => {
         setStreaming(false);
         abortRef.current = null;
+        sendingRef.current = false;
         setMessages((prev) => {
           const next = [...prev];
-          const last = next[next.length - 1];
-          if (last?.role === "assistant" && !last.content) {
-            last.content = `[错误] ${err}`;
+          const i = next.length - 1;
+          if (next[i]?.role === "assistant" && !next[i].content) {
+            next[i] = { ...next[i], content: `[错误] ${err}` };
           }
           return next;
         });
@@ -132,6 +159,7 @@ export default function ChatPage() {
   const handleCancel = () => {
     abortRef.current?.abort();
     setStreaming(false);
+    sendingRef.current = false;
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -182,6 +210,8 @@ export default function ChatPage() {
           input={input}
           setInput={setInput}
           streaming={streaming}
+          useRag={useRag}
+          onToggleRag={() => setUseRag((v) => !v)}
           onSend={handleSend}
           onCancel={handleCancel}
           onKeyDown={handleKeyDown}
@@ -221,10 +251,39 @@ export default function ChatPage() {
             >
               {msg.role === "assistant" ? (
                 msg.content ? (
-                  <div className="prose-chat">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {msg.content}
-                    </ReactMarkdown>
+                  <div>
+                    <div className="prose-chat">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                    {/* 参考来源 */}
+                    {msg.sources && msg.sources.length > 0 && (
+                      <details className="mt-3 border-t border-neutral-100 pt-2">
+                        <summary className="text-xs text-neutral-400 cursor-pointer hover:text-neutral-500 flex items-center gap-1">
+                          <BookOpen size={12} />
+                          参考来源 ({msg.sources.length})
+                        </summary>
+                        <div className="mt-2 space-y-1.5">
+                          {msg.sources.map((src, si) => (
+                            <div
+                              key={si}
+                              className="bg-neutral-50 rounded-lg px-3 py-2 text-xs text-neutral-500"
+                            >
+                              <div className="flex items-center gap-1 text-neutral-400 mb-0.5">
+                                <FileText size={10} />
+                                <span className="truncate">
+                                  {src.source || "未知来源"}
+                                </span>
+                              </div>
+                              <p className="line-clamp-3 leading-relaxed">
+                                {src.content}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
                   </div>
                 ) : (
                   <span className="inline-flex items-center gap-1 text-neutral-400">
@@ -276,6 +335,8 @@ export default function ChatPage() {
         input={input}
         setInput={setInput}
         streaming={streaming}
+        useRag={useRag}
+        onToggleRag={() => setUseRag((v) => !v)}
         onSend={handleSend}
         onCancel={handleCancel}
         onKeyDown={handleKeyDown}
@@ -290,6 +351,8 @@ function ChatInputBar({
   input,
   setInput,
   streaming,
+  useRag,
+  onToggleRag,
   onSend,
   onCancel,
   onKeyDown,
@@ -298,6 +361,8 @@ function ChatInputBar({
   input: string;
   setInput: (v: string) => void;
   streaming: boolean;
+  useRag: boolean;
+  onToggleRag: () => void;
   onSend: () => void;
   onCancel: () => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
@@ -305,6 +370,23 @@ function ChatInputBar({
 }) {
   return (
     <div className="border-t border-neutral-200/60 pt-4 pb-2 bg-neutral-50">
+      {/* RAG 切换 */}
+      <div className="flex items-center justify-end mb-2">
+        <button
+          type="button"
+          onClick={onToggleRag}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer",
+            useRag
+              ? "bg-primary-100 text-primary-700 hover:bg-primary-200"
+              : "bg-neutral-100 text-neutral-500 hover:bg-neutral-200"
+          )}
+        >
+          <BookOpen size={12} />
+          {useRag ? "知识库已开启" : "普通对话"}
+        </button>
+      </div>
+
       <div className="flex items-end gap-2 bg-white rounded-2xl border border-neutral-300 shadow-sm px-3 py-2 focus-within:ring-2 focus-within:ring-primary-500/20 focus-within:border-primary-500 transition-all">
         <textarea
           ref={inputRef}
@@ -312,12 +394,13 @@ function ChatInputBar({
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={onKeyDown}
           rows={1}
-          placeholder="输入您的问题..."
+          placeholder={useRag ? "基于知识库提问..." : "输入您的问题..."}
           disabled={streaming}
           className="flex-1 resize-none bg-transparent text-sm text-neutral-800 placeholder:text-neutral-400 outline-none py-1.5 max-h-40"
         />
         {streaming ? (
           <button
+            type="button"
             onClick={onCancel}
             className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-danger-100 text-danger-500 hover:bg-danger-200 transition-colors cursor-pointer shrink-0"
           >
@@ -325,6 +408,7 @@ function ChatInputBar({
           </button>
         ) : (
           <button
+            type="button"
             onClick={onSend}
             disabled={!input.trim()}
             className="h-9 w-9 inline-flex items-center justify-center rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0"

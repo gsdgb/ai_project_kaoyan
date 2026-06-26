@@ -37,3 +37,31 @@ def stream_chat_with_llm(
     for chunk in stream:
         if chunk.choices and chunk.choices[0].delta.content:
             yield chunk.choices[0].delta.content
+
+
+def stream_chat_with_prompt(
+    prompt: str, db: Session, owner_id: int
+) -> Generator[str, None, None]:
+    """流式 RAG 对话：使用自定义 prompt（含知识库上下文），忽略历史"""
+    history = get_recent_messages(db, owner_id, limit=10)
+
+    messages = [
+        {"role": "system", "content": "你是一个专业 AI 考研学习助手。需要你言简意赅的回复"},
+    ]
+
+    for msg in history:
+        messages.append({"role": "user", "content": msg.user_message})
+        messages.append({"role": "assistant", "content": msg.assistant_message})
+
+    messages.append({"role": "user", "content": prompt})
+
+    stream = client.chat.completions.create(
+        model=settings.OPENAI_MODEL,
+        messages=messages,
+        temperature=0.3,
+        stream=True,
+    )
+
+    for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
