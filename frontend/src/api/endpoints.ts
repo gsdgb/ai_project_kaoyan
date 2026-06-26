@@ -65,13 +65,15 @@ export function streamChat(
   const controller = new AbortController();
   const token = localStorage.getItem("token");
 
-  fetch(
-    `/api/v1/stream?question=${encodeURIComponent(question)}`,
-    {
-      headers: { Authorization: `Bearer ${token}` },
-      signal: controller.signal,
-    }
-  )
+  fetch("/api/v1/chat/stream", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ message: question }),
+    signal: controller.signal,
+  })
     .then(async (res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const reader = res.body?.getReader();
@@ -92,16 +94,15 @@ export function streamChat(
             const event = JSON.parse(raw);
             if (event.type === "token") {
               onChunk(event.content ?? "");
-            } else if (event.type === "status" && event.content === "finished") {
+            } else if (event.type === "done") {
               onDone();
               return;
             } else if (event.type === "error") {
               onError(event.content ?? "stream error");
               return;
             }
-            // ignore other event types (tool_start, node_end, hitl)
+            // saved, tool_start, node_end, hitl etc. → ignore
           } catch {
-            // not JSON — treat as raw text chunk
             onChunk(raw);
           }
         }
@@ -113,6 +114,7 @@ export function streamChat(
           try {
             const event = JSON.parse(raw);
             if (event.type === "token") onChunk(event.content ?? "");
+            else if (event.type === "done") { onDone(); return; }
           } catch {
             onChunk(raw);
           }

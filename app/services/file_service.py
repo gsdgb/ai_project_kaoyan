@@ -6,14 +6,9 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.models.user_file import UserFile
+from app.rag.pipelines.ingest_pipeline import ingest_file
 
-from app.rag.pipelines.ingest_pipeline import ingest_pdf
-
-ALLOWED_EXTENSIONS = {
-    ".pdf",
-    ".docx",
-    ".txt",
-}
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt"}
 
 MAX_FILE_SIZE = 10 * 1024 * 1024
 
@@ -42,14 +37,11 @@ async def save_upload_file(
         )
 
     unique_filename = f"{uuid.uuid4()}{file_ext}"
-
     os.makedirs(UPLOAD_DIR, exist_ok=True)
-
     file_path = os.path.join(UPLOAD_DIR, unique_filename)
 
     async with aiofiles.open(file_path, "wb") as out_file:
         await out_file.write(content)
-
 
     user_file = UserFile(
         owner_id=owner_id,
@@ -61,15 +53,26 @@ async def save_upload_file(
     )
 
     db.add(user_file)
-
     db.commit()
-
     db.refresh(user_file)
-    if file_ext == ".pdf":
-        ingest_pdf(
+
+    # 对所有支持的文件类型执行向量化索引
+    try:
+        ingest_file(
             file_path=file_path,
+            file_ext=file_ext,
             owner_id=owner_id,
-            file_id=user_file.id
+            file_id=user_file.id,
+        )
+    except Exception:
+        # 索引失败 → 回滚：删磁盘文件 + 删数据库记录
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        db.delete(user_file)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="File ingestion failed, record rolled back",
         )
 
     return user_file

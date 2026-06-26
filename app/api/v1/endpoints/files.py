@@ -9,6 +9,7 @@ from app.models.user import User
 from app.models.user_file import UserFile
 from app.schemas.file import FileResponse
 from app.services.file_service import save_upload_file
+from app.rag.vectordb.chroma_service import delete_vectors_by_file
 
 router = APIRouter()
 
@@ -77,7 +78,10 @@ def delete_file(
     if user_file is None:
         raise HTTPException(status_code=404, detail="File not found")
 
-    # 删磁盘文件
+    # 删除 Chroma 向量
+    delete_vectors_by_file(owner_id=current_user.id, file_id=user_file.id)
+
+    # 删除磁盘文件
     file_path = user_file.file_path
     if file_path and os.path.exists(file_path):
         os.remove(file_path)

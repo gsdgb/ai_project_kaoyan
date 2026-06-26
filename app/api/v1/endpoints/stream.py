@@ -12,7 +12,9 @@ async def stream_chat(
     current_user: User = Depends(get_current_user)  # 严格鉴权
 ):
     """
-    高性能标准 SSE 流式接口
+    高性能标准 SSE 流式接口。
+    仅用于 LangGraph Agent（含 Planner→Researcher→Reflector→Finalizer 流程）。
+    普通聊天请使用 POST /chat/stream。
     """
     async def event_generator():
         async for chunk in stream_graph_response(question, current_user.id):

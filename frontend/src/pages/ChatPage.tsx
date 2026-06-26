@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { chatApi, conversationApi } from "@/api/endpoints";
+import { streamChat, conversationApi } from "@/api/endpoints";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { cn } from "@/lib/utils";
 import {
@@ -81,54 +81,52 @@ export default function ChatPage() {
     }
   }, [input]);
 
-  const handleSend = async () => {
+  const handleSend = () => {
     const q = input.trim();
     if (!q || streaming) return;
 
-    // Cancel any pending abort
     if (abortRef.current) {
       abortRef.current.abort();
     }
-    const controller = new AbortController();
-    abortRef.current = controller;
 
     setMessages((prev) => [...prev, { role: "user", content: q }]);
     setInput("");
     setStreaming(true);
-
-    // Placeholder for assistant message
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
-    try {
-      const { data } = await chatApi.send({ message: q }, controller.signal);
-      setMessages((prev) => {
-        const next = [...prev];
-        const last = next[next.length - 1];
-        if (last?.role === "assistant") {
-          last.content = data.data.assistant_message;
-        }
-        return next;
-      });
-    } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        // user cancelled — do nothing
-      } else {
+    abortRef.current = streamChat(
+      q,
+      // onChunk — append each token to the last assistant message
+      (text) => {
+        setMessages((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.role === "assistant") {
+            last.content += text;
+          }
+          return [...next];
+        });
+      },
+      // onDone
+      () => {
+        setStreaming(false);
+        abortRef.current = null;
+      },
+      // onError
+      (err) => {
+        setStreaming(false);
+        abortRef.current = null;
         setMessages((prev) => {
           const next = [...prev];
           const last = next[next.length - 1];
           if (last?.role === "assistant" && !last.content) {
-            const msg =
-              err instanceof Error ? err.message : "请求失败，请稍后重试";
-            last.content = `[错误] ${msg}`;
+            last.content = `[错误] ${err}`;
           }
           return next;
         });
-        toast.error("请求失败");
+        toast.error("流式响应中断: " + err);
       }
-    } finally {
-      setStreaming(false);
-      abortRef.current = null;
-    }
+    );
   };
 
   const handleCancel = () => {

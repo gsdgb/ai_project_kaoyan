@@ -28,6 +28,8 @@ def rag_chat_api(
     )
 
 
+# NOTE: 当前 /rag/history 从 ChatMessage 表读取，与 /conversations 共享同一张表。
+# 这意味着普通聊天和 RAG 对话记录会混在一起返回。后续版本应引入 is_rag 字段或独立表来区分。
 @router.get("/rag/history")
 def rag_history(
     db: Session = Depends(get_db),
